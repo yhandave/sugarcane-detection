@@ -15,5 +15,6 @@ void main() {
 
     expect(find.text('Sugarcane Disease Classifier'), findsOneWidget);
     expect(find.text('Upload Image'), findsOneWidget);
+    expect(find.text('Capture Photo'), findsOneWidget);
   });
 }

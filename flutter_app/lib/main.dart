@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:camera/camera.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -49,14 +50,83 @@ class _ClassifierPageState extends State<ClassifierPage> {
     if (result == null || result.files.single.bytes == null) return;
 
     final file = result.files.single;
+    await _useImage(file.bytes!, file.name, file.extension ?? '.jpg');
+  }
+
+  Future<void> _captureImage() async {
+    CameraController? controller;
+    try {
+      final cameras = await availableCameras();
+      if (cameras.isEmpty) {
+        throw Exception('No camera was found on this device.');
+      }
+
+      controller = CameraController(
+        cameras.first,
+        ResolutionPreset.high,
+        enableAudio: false,
+      );
+      await controller.initialize();
+      if (!mounted) return;
+
+      final image = await showDialog<XFile>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Capture Photo'),
+          content: AspectRatio(
+            aspectRatio: controller!.value.aspectRatio,
+            child: CameraPreview(controller),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton.icon(
+              onPressed: () async {
+                final capturedImage = await controller!.takePicture();
+                if (dialogContext.mounted) {
+                  Navigator.of(dialogContext).pop(capturedImage);
+                }
+              },
+              icon: const Icon(Icons.camera),
+              label: const Text('Take Photo'),
+            ),
+          ],
+        ),
+      );
+      if (image == null) return;
+
+      final bytes = await image.readAsBytes();
+      final extension = image.path.split('.').last;
+      await _useImage(
+        bytes,
+        image.name,
+        extension.isEmpty ? '.jpg' : extension,
+      );
+    } on Object catch (error) {
+      if (mounted) {
+        setState(() => _error = 'Could not access the camera: $error');
+      }
+    } finally {
+      await controller?.dispose();
+    }
+  }
+
+  Future<void> _useImage(
+    Uint8List bytes,
+    String fileName,
+    String extension,
+  ) async {
     setState(() {
-      _imageBytes = file.bytes;
-      _fileName = file.name;
+      _imageBytes = bytes;
+      _fileName = fileName;
       _prediction = null;
       _confidence = null;
       _error = null;
     });
-    await _predict(file.bytes!, file.extension ?? '.jpg');
+    await _predict(bytes, extension);
   }
 
   Future<void> _predict(Uint8List bytes, String extension) async {
@@ -113,6 +183,12 @@ class _ClassifierPageState extends State<ClassifierPage> {
                   onPressed: _loading ? null : _selectImage,
                   icon: const Icon(Icons.upload_file),
                   label: const Text('Upload Image'),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: _loading ? null : _captureImage,
+                  icon: const Icon(Icons.camera_alt_outlined),
+                  label: const Text('Capture Photo'),
                 ),
                 const SizedBox(height: 20),
                 if (_loading) const CircularProgressIndicator(),
