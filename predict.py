@@ -9,13 +9,6 @@ from ultralytics import YOLO
 PROJECT_ROOT = Path(__file__).resolve().parent
 MODEL_CANDIDATES = (
     PROJECT_ROOT / "runs" / "classify" / "sugarcane-classifier" / "weights" / "best.pt",
-    PROJECT_ROOT
-    / "runs"
-    / "classify"
-    / "runs"
-    / "sugarcane-classifier"
-    / "weights"
-    / "best.pt",
 )
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 

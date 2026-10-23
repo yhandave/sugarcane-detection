@@ -17,7 +17,6 @@ LEGACY_TRAINED_MODEL = (
 EXPECTED_CLASSES = {
     "Brown Spot",
     "Grassy Shoot",
-    "Healthy",
     "Mosaic",
     "Red Rot",
     "Smut",

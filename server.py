@@ -12,7 +12,6 @@ from ultralytics import YOLO
 ROOT = Path(__file__).resolve().parent
 MODEL_CANDIDATES = (
     ROOT / "runs" / "classify" / "sugarcane-classifier" / "weights" / "best.pt",
-    ROOT / "runs" / "classify" / "runs" / "sugarcane-classifier" / "weights" / "best.pt",
 )
 MODEL_PATH = next((path for path in MODEL_CANDIDATES if path.is_file()), None)
 if MODEL_PATH is None:
