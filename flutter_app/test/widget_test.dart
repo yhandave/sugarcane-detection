@@ -13,7 +13,7 @@ void main() {
   testWidgets('shows upload control', (WidgetTester tester) async {
     await tester.pumpWidget(const SugarcaneApp());
 
-    expect(find.text('Sugarcane Disease Classifier'), findsOneWidget);
+    expect(find.text('kalamAI'), findsOneWidget);
     expect(find.text('Upload Image'), findsOneWidget);
     expect(find.text('Capture Photo'), findsOneWidget);
   });

@@ -6,7 +6,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from ultralytics import YOLO
 
-from predict import IMAGE_EXTENSIONS, MODEL_CANDIDATES
+from predict import IMAGE_EXTENSIONS, MODEL_CANDIDATES, validate_model_classes
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -68,6 +68,7 @@ class ClassifierApp:
         try:
             if self.model is None:
                 self.model = YOLO(str(model_path))
+                validate_model_classes(self.model)
             results = self.model.predict(
                 source=[str(path) for path in paths],
                 project=str(PROJECT_ROOT / "runs" / "classify"),

@@ -9,8 +9,25 @@ from ultralytics import YOLO
 PROJECT_ROOT = Path(__file__).resolve().parent
 MODEL_CANDIDATES = (
     PROJECT_ROOT / "runs" / "classify" / "sugarcane-classifier" / "weights" / "best.pt",
+    PROJECT_ROOT / "sugarcane_best.pt",
 )
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
+EXPECTED_CLASSES = {
+    "Grassy Shoot",
+    "Mosaic",
+    "Red Rot",
+    "Smut",
+    "Yellow Leaf",
+}
+
+
+def validate_model_classes(model: YOLO) -> None:
+    model_classes = set(model.names.values())
+    if model_classes != EXPECTED_CLASSES:
+        raise RuntimeError(
+            "The model does not match the five-disease dataset. "
+            "Retrain with .venv\\Scripts\\python.exe train.py."
+        )
 
 
 def parse_args() -> argparse.Namespace:
@@ -64,6 +81,7 @@ def main() -> None:
         prediction_source = str(source)
 
     model = YOLO(str(model_path))
+    validate_model_classes(model)
     results = model.predict(
         source=prediction_source,
         save=True,

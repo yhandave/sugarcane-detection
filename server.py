@@ -8,16 +8,20 @@ from pathlib import Path
 
 from ultralytics import YOLO
 
+from predict import validate_model_classes
+
 
 ROOT = Path(__file__).resolve().parent
 MODEL_CANDIDATES = (
     ROOT / "runs" / "classify" / "sugarcane-classifier" / "weights" / "best.pt",
+    ROOT / "sugarcane_best.pt",
 )
 MODEL_PATH = next((path for path in MODEL_CANDIDATES if path.is_file()), None)
 if MODEL_PATH is None:
     raise FileNotFoundError("Train the model before starting the prediction server.")
 
 MODEL = YOLO(str(MODEL_PATH))
+validate_model_classes(MODEL)
 
 
 class PredictionHandler(BaseHTTPRequestHandler):
@@ -51,7 +55,20 @@ class PredictionHandler(BaseHTTPRequestHandler):
                 raise RuntimeError("The model did not return a classification.")
             class_name = result.names[result.probs.top1]
             confidence = float(result.probs.top1conf)
-            self._send_json({"className": class_name, "confidence": confidence})
+            possible_class_name = None
+            possible_confidence = None
+            if len(result.probs.top5) > 1:
+                possible_class_index = result.probs.top5[1]
+                possible_class_name = result.names[possible_class_index]
+                possible_confidence = float(result.probs.top5conf[1])
+            self._send_json(
+                {
+                    "className": class_name,
+                    "confidence": confidence,
+                    "possibleClassName": possible_class_name,
+                    "possibleConfidence": possible_confidence,
+                }
+            )
         except (KeyError, ValueError, json.JSONDecodeError, OSError, RuntimeError) as error:
             self._send_json({"error": str(error)}, 400)
 
@@ -75,4 +92,4 @@ class PredictionHandler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     print("Prediction server listening at http://127.0.0.1:8000")
-    ThreadingHTTPServer(("127.0.0.1", 8000), PredictionHandler).serve_forever()
+    ThreadingHTTPServer(("0.0.0.0", 8000), PredictionHandler).serve_forever()

@@ -15,7 +15,6 @@ LEGACY_TRAINED_MODEL = (
     OUTPUT_DIR / "runs" / "sugarcane-classifier" / "weights" / "best.pt"
 )
 EXPECTED_CLASSES = {
-    "Brown Spot",
     "Grassy Shoot",
     "Mosaic",
     "Red Rot",
@@ -68,7 +67,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train or evaluate the sugarcane classifier.")
     parser.add_argument("--evaluate", action="store_true", help="Evaluate on the test split.")
     parser.add_argument("--model", help="Model path for evaluation.")
-    parser.add_argument("--epochs", type=int, default=50)
+    parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--batch", type=int, default=16)
     parser.add_argument("--imgsz", type=int, default=224)
     return parser.parse_args()
@@ -113,6 +112,11 @@ def main() -> None:
         workers=0,
         project=str(OUTPUT_DIR),
         name="sugarcane-classifier",
+        exist_ok=True,
+        patience=25,
+        auto_augment="randaugment",
+        erasing=0.25,
+        fliplr=0.5,
     )
     print(
         "Training complete. Model: "
