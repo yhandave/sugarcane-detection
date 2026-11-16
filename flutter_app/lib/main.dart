@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:camera/camera.dart';
 import 'package:file_picker/file_picker.dart';
@@ -42,7 +43,41 @@ class _DiseaseInfo {
   final List<String> actions;
 }
 
+class _PredictionRecord {
+  const _PredictionRecord({
+    required this.image,
+    required this.disease,
+    required this.confidence,
+    required this.possibleDisease,
+    required this.possibleConfidence,
+    required this.createdAt,
+  });
+
+  final Uint8List image;
+  final String disease;
+  final double confidence;
+  final String? possibleDisease;
+  final double? possibleConfidence;
+  final DateTime createdAt;
+}
+
 const _diseaseInfo = <String, _DiseaseInfo>{
+  'Brown Spot': _DiseaseInfo(
+    about:
+        'Brown spot is a fungal disease that creates brown lesions on sugarcane leaves.',
+    symptoms: [
+      'Small brown spots with pale centers',
+      'Spots that enlarge and merge',
+      'Drying or damaged leaf tissue',
+      'Reduced plant vigor',
+    ],
+    actions: [
+      'Remove severely affected leaves when practical.',
+      'Improve field airflow and avoid excessive leaf wetness.',
+      'Use healthy planting materials and resistant varieties.',
+      'Ask an agriculture expert to confirm treatment options.',
+    ],
+  ),
   'Grassy Shoot': _DiseaseInfo(
     about:
         'Grassy shoot is a disease that causes sugarcane to grow many thin shoots that look like grass.',
@@ -136,30 +171,54 @@ class SugarcaneApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const blue = Color(0xFF0875C9);
+    const forestGreen = Color(0xFF146B45);
+    const freshGreen = Color(0xFF55B96A);
     return MaterialApp(
       title: 'Sugarcane Disease Classifier',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
-          seedColor: blue,
+          seedColor: forestGreen,
           brightness: Brightness.light,
         ),
-        scaffoldBackgroundColor: const Color(0xFFF5F9FD),
+        scaffoldBackgroundColor: const Color(0xFFF4F8F3),
         appBarTheme: AppBarTheme(
-          backgroundColor: blue,
+          backgroundColor: forestGreen,
           foregroundColor: Colors.white,
           centerTitle: false,
           elevation: 0,
         ),
         cardTheme: CardThemeData(
           color: Colors.white,
-          elevation: 1,
+          elevation: 2,
           margin: EdgeInsets.zero,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
-            side: BorderSide(color: blue.withValues(alpha: 0.18)),
+            side: BorderSide(color: forestGreen.withValues(alpha: 0.14)),
           ),
+        ),
+        filledButtonTheme: FilledButtonThemeData(
+          style: FilledButton.styleFrom(
+            backgroundColor: forestGreen,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+        ),
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: forestGreen,
+            side: const BorderSide(color: forestGreen),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+        ),
+        progressIndicatorTheme: const ProgressIndicatorThemeData(
+          color: freshGreen,
         ),
         useMaterial3: true,
       ),
@@ -184,6 +243,24 @@ class _ClassifierPageState extends State<ClassifierPage> {
   double? _possibleConfidence;
   String? _error;
   bool _loading = false;
+  bool _showSplash = true;
+  int _selectedTab = 0;
+  final List<_PredictionRecord> _history = [];
+  Timer? _splashTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _splashTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) setState(() => _showSplash = false);
+    });
+  }
+
+  @override
+  void dispose() {
+    _splashTimer?.cancel();
+    super.dispose();
+  }
 
   Future<void> _selectImage() async {
     final result = await FilePicker.platform.pickFiles(
@@ -260,7 +337,7 @@ class _ClassifierPageState extends State<ClassifierPage> {
         MediaQuery.orientationOf(context) == Orientation.portrait;
     return SizedBox(
       width: double.infinity,
-      height: 320,
+      height: kIsWeb ? 420 : 320,
       child: ClipRect(
         child: FittedBox(
           fit: BoxFit.cover,
@@ -312,11 +389,27 @@ class _ClassifierPageState extends State<ClassifierPage> {
       if (response.statusCode != 200 || body['error'] != null) {
         throw Exception(body['error'] ?? 'Prediction failed.');
       }
+      final prediction = body['className'] as String;
+      final confidence = (body['confidence'] as num).toDouble();
+      final possiblePrediction = body['possibleClassName'] as String?;
+      final possibleConfidence = (body['possibleConfidence'] as num?)
+          ?.toDouble();
       setState(() {
-        _prediction = body['className'] as String;
-        _confidence = (body['confidence'] as num).toDouble();
-        _possiblePrediction = body['possibleClassName'] as String?;
-        _possibleConfidence = (body['possibleConfidence'] as num?)?.toDouble();
+        _prediction = prediction;
+        _confidence = confidence;
+        _possiblePrediction = possiblePrediction;
+        _possibleConfidence = possibleConfidence;
+        _history.insert(
+          0,
+          _PredictionRecord(
+            image: Uint8List.fromList(bytes),
+            disease: prediction,
+            confidence: confidence,
+            possibleDisease: possiblePrediction,
+            possibleConfidence: possibleConfidence,
+            createdAt: DateTime.now(),
+          ),
+        );
       });
     } on Object catch (error) {
       setState(
@@ -673,6 +766,118 @@ class _ClassifierPageState extends State<ClassifierPage> {
     );
   }
 
+  void _showHistoryDetails(_PredictionRecord record) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (context) => SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
+        child: _buildHistoryDetails(context, record),
+      ),
+    );
+  }
+
+  Widget _buildHistoryDetails(
+    BuildContext context,
+    _PredictionRecord record,
+  ) {
+    final theme = Theme.of(context);
+    final info = _diseaseInfo[record.disease];
+    final possibleText =
+        record.possibleDisease == null || record.possibleConfidence == null
+        ? null
+        : '${record.possibleDisease} (${(record.possibleConfidence! * 100).toStringAsFixed(1)}%)';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Image.memory(
+            record.image,
+            width: double.infinity,
+            height: 240,
+            fit: BoxFit.contain,
+          ),
+        ),
+        const SizedBox(height: 18),
+        Text(
+          record.disease,
+          style: theme.textTheme.headlineSmall?.copyWith(
+            color: theme.colorScheme.primary,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          '${(record.confidence * 100).toStringAsFixed(1)}% confidence',
+          style: theme.textTheme.titleMedium?.copyWith(
+            color: theme.colorScheme.primary,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        if (possibleText != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            'Possible detection: $possibleText',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+        if (info != null) ...[
+          const SizedBox(height: 22),
+          Text(
+            'About ${record.disease}',
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(info.about),
+          const SizedBox(height: 18),
+          Text(
+            'Common symptoms',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          ...info.symptoms.map(
+            (symptom) => ListTile(
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              leading: Icon(
+                Icons.check_circle_outline,
+                color: theme.colorScheme.primary,
+              ),
+              title: Text(symptom),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Suggested actions',
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          ...info.actions.map(
+            (action) => ListTile(
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              leading: Icon(
+                Icons.eco_outlined,
+                color: theme.colorScheme.primary,
+              ),
+              title: Text(action),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
   Widget _buildPageHeader(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     return Padding(
@@ -699,10 +904,254 @@ class _ClassifierPageState extends State<ClassifierPage> {
     );
   }
 
+  Widget _buildSplashScreen() {
+    return Scaffold(
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFF0D4F34), Color(0xFF2D9656)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: Center(
+          child: TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0.7, end: 1),
+            duration: const Duration(milliseconds: 700),
+            curve: Curves.easeOutBack,
+            builder: (context, scale, child) =>
+                Transform.scale(scale: scale, child: child),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.16),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Image.asset(
+                    'assets/kalam_ai_logo.png',
+                    height: 92,
+                    width: 92,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'kalamAI',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 32,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.4,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Smart Sugarcane Disease Detection',
+                  style: TextStyle(color: Colors.white70, fontSize: 15),
+                ),
+                const SizedBox(height: 32),
+                const SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 3,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHistoryPage(BuildContext context) {
+    final theme = Theme.of(context);
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 900),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Prediction history',
+                      style: theme.textTheme.headlineMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                  if (_history.isNotEmpty)
+                    IconButton(
+                      tooltip: 'Delete all history',
+                      onPressed: _clearHistory,
+                      icon: const Icon(Icons.delete_sweep_outlined),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Your recent analysis results are kept for this session.',
+                style: theme.textTheme.bodyLarge,
+              ),
+              const SizedBox(height: 22),
+              if (_history.isEmpty)
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: Center(
+                      child: Column(
+                        children: [
+                          Icon(
+                            Icons.history,
+                            size: 54,
+                            color: theme.colorScheme.primary,
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'No predictions yet',
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          const Text(
+                            'Your completed scans will appear here.',
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                )
+              else
+                ..._history.asMap().entries.map(
+                  (entry) => Card(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    child: ListTile(
+                      onTap: () => _showHistoryDetails(entry.value),
+                      contentPadding: const EdgeInsets.all(10),
+                      leading: ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: Image.memory(
+                          entry.value.image,
+                          width: 64,
+                          height: 64,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                      title: Text(
+                        entry.value.disease,
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      subtitle: Text(
+                        '${(entry.value.confidence * 100).toStringAsFixed(1)}% confidence  •  ${entry.value.createdAt.hour.toString().padLeft(2, '0')}:${entry.value.createdAt.minute.toString().padLeft(2, '0')}${entry.value.possibleDisease == null ? '' : '\nPossible: ${entry.value.possibleDisease}'}',
+                      ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.verified_outlined,
+                            color: theme.colorScheme.primary,
+                          ),
+                          IconButton(
+                            tooltip: 'Delete prediction',
+                            onPressed: () => _deleteHistoryItem(entry.key),
+                            icon: const Icon(Icons.delete_outline),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _deleteHistoryItem(int index) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete prediction?'),
+        content: const Text(
+          'This prediction will be removed from your session history.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted && index < _history.length) {
+      setState(() => _history.removeAt(index));
+    }
+  }
+
+  Future<void> _clearHistory() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete all history?'),
+        content: const Text('All predictions from this session will be removed.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete all'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) {
+      setState(_history.clear);
+    }
+  }
+
+  Widget _buildBottomNavigation(BuildContext context) {
+    return NavigationBar(
+      selectedIndex: _selectedTab,
+      onDestinationSelected: (index) => setState(() => _selectedTab = index),
+      destinations: const [
+        NavigationDestination(
+          icon: Icon(Icons.home_outlined),
+          selectedIcon: Icon(Icons.home),
+          label: 'Home',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.history_outlined),
+          selectedIcon: Icon(Icons.history),
+          label: 'History',
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_showSplash) return _buildSplashScreen();
+
     return Scaffold(
       appBar: AppBar(
+        automaticallyImplyLeading: false,
         title: Row(
           children: [
             Image.asset(
@@ -719,7 +1168,9 @@ class _ClassifierPageState extends State<ClassifierPage> {
           ],
         ),
       ),
-      body: LayoutBuilder(
+      body: _selectedTab == 1
+          ? _buildHistoryPage(context)
+          : LayoutBuilder(
         builder: (context, constraints) {
           final isWideWeb = kIsWeb && constraints.maxWidth >= 900;
           return Center(
@@ -762,6 +1213,7 @@ class _ClassifierPageState extends State<ClassifierPage> {
           );
         },
       ),
+      bottomNavigationBar: _buildBottomNavigation(context),
     );
   }
 }

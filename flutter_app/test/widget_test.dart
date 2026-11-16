@@ -12,6 +12,8 @@ import 'package:flutter_app/main.dart';
 void main() {
   testWidgets('shows upload control', (WidgetTester tester) async {
     await tester.pumpWidget(const SugarcaneApp());
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump();
 
     expect(find.text('kalamAI'), findsOneWidget);
     expect(find.text('Upload Image'), findsOneWidget);
